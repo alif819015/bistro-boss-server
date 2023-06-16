@@ -1,7 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-var jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
+const nodemailer = require("nodemailer");
+const mg = require('nodemailer-mailgun-transport');
 const app = express();
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
@@ -9,6 +11,38 @@ const port = process.env.PORT || 5000;
 //middleware
 app.use(cors());
 app.use(express.json());
+
+const auth = {
+  auth: {
+    api_key: process.env.EMAIL_PRIVATE_KEY,
+    domain: process.env.EMAIL_DOMAIN
+  }
+}
+
+const transporter = nodemailer.createTransport(mg(auth));
+
+// send payment confirmation email
+const sendPaymentConfirmationEmail = payment =>{
+  transporter.sendMail({
+    from: "mahmudhassan11752@gmail.com", // verified sender email
+    to: "mahmudhassan11752@gmail.com", // recipient email
+    subject: "your Order is confirmed. Enjoy the food soon.", // Subject line
+    text: "Hello world!", // plain text body
+    html: `
+    <div>
+    <h2>Payment confirmed!!</h2>
+    <p>Transaction id: ${payment.transactionId}</p>
+    </div>
+    `, // html body
+  }, function(error, info){
+    if (error) {
+      console.log(error);
+    } else {
+      console.log('Email sent: ' + info.response);
+    }
+  });
+ 
+}
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
@@ -198,6 +232,9 @@ app.get('/carts', verifyJWT, async(req,res) =>{
 
       const query = {_id: {$in: payment.cartItems.map(id => new ObjectId(id))}}
       const deleteResult = await cartCollection.deleteMany(query)
+
+      // send an email confirming payment
+      sendPaymentConfirmationEmail(payment);
 
       res.send({insertResult, deleteResult});
     })
